@@ -4,13 +4,13 @@ on:
   schedule:
     # Runs every hour from 9:00 to 18:00 UTC, Monday through Friday
     - cron: '0 9-18 * * 1-5'
-  workflow_dispatch: # Allows manual trigger for testing
+  workflow_dispatch: 
 
 permissions:
-  contents: write # Needed to save CSV reports back to the repo
+  contents: write 
 
 jobs:
-  build:
+  execute-script:
     runs-on: ubuntu-latest
 
     steps:
@@ -21,22 +21,18 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          # We do not include the 'cache' line here to avoid the lockfile error
 
       - name: Install dependencies
-        run: npm install
+        run: npm install --no-package-lock 
 
-      - name: Run analysis
+      - name: Run Trend Analyzer
         run: node trend-analyzer.js
 
       - name: Commit and Push Results
         run: |
           git config --global user.name "nrkkalyan"
           git config --global user.email "nrkkalyan@gmail.com"
-          
-          # Add the generated stock_data folder and trading_journal.csv
           git add .
-          
-          # Only commit if changes exist to avoid workflow errors
-          git commit -m "chore: update trend data $(date +'%Y-%m-%d %H:%M')" || exit 0
-          
+          git commit -m "chore: automated trend update $(date +'%Y-%m-%d %H:%M')" || exit 0
           git push
