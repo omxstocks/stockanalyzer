@@ -1,24 +1,9 @@
 {
-  "name": "2026-02-07",
+  "name": "stock-analyzer",
   "version": "1.0.0",
-  "description": "",
-  "main": "1+stock-buy-signal.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/omxstocks/stockanalyzer.git"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
-  "bugs": {
-    "url": "https://github.com/omxstocks/stockanalyzer/issues"
-  },
-  "homepage": "https://github.com/omxstocks/stockanalyzer#readme",
+  "description": "Daily stock trend analysis using Yahoo Finance",
+  "main": "trend-analyzer.js",
   "dependencies": {
-    "axios": "^1.13.5"
+    "axios": "^1.6.0"
   }
 }
