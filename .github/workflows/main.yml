@@ -1,0 +1,41 @@
+name: Hourly Weekday Analysis
+
+on:
+  schedule:
+    # This runs every hour at minute 0, from 9:00 to 18:00, Monday through Friday
+    - cron: '0 9-18 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  execute-script:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run Script
+        run: node ../../trend-analyzer.js
+        
+      - name: Commit and Push Results
+        run: |
+          git config --global user.name "nrkkalyan"
+          git config --global user.email "nrkkalyan@gmail.com"
+
+          git add .
+          # The '|| exit 0' ensures the workflow doesn't fail if no files were changed
+          git commit -m "chore: automated update $(date +'%Y-%m-%d %H:%M')" || exit 0
+          
+          git push
