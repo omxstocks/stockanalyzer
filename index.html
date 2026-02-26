@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Monitor Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a;
+            color: #f1f5f9;
+        }
+
+        .glass-card {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .glass-card:hover {
+            border-color: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+        }
+
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 10px;
+        }
+
+        .status-buy { color: #4ade80; background: rgba(74, 222, 128, 0.1); border: 1px solid rgba(74, 222, 128, 0.2); }
+        .status-sell { color: #f87171; background: rgba(248, 113, 113, 0.1); border: 1px solid rgba(248, 113, 113, 0.2); }
+        .status-hold { color: #fbbf24; background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.2); }
+        
+        .negative-val { color: #f87171 !important; }
+        
+        input[type="date"]::-webkit-calendar-picker-indicator {
+            filter: invert(1);
+        }
+
+        .trend-up { color: #4ade80; }
+        .trend-down { color: #f87171; }
+        .trend-neutral { color: #94a3b8; }
+
+        .vsa-badge {
+            font-size: 9px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 800;
+            text-transform: uppercase;
+        }
+    </style>
+</head>
+<body class="min-h-screen custom-scrollbar">
+
+    <!-- Navbar -->
+    <nav class="sticky top-0 z-50 border-b border-slate-800 bg-slate-900/80 backdrop-blur-md px-6 py-4">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-blue-600 rounded-lg shadow-lg shadow-blue-500/20">
+                    <i data-lucide="trending-up" class="w-6 h-6 text-white"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-black tracking-tight uppercase italic leading-none">StockMonitor <span class="text-blue-500">Pro</span></h1>
+                    <p id="current-file-date" class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">Initializing...</p>
+                </div>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-3">
+                <!-- Date Picker -->
+                <div class="relative group">
+                    <i data-lucide="calendar" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"></i>
+                    <input type="date" id="date-selector" 
+                        class="bg-slate-800 border border-slate-700 rounded-lg pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all cursor-pointer">
+                </div>
+                
+                <!-- Search -->
+                <div class="relative flex-grow md:flex-grow-0">
+                    <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"></i>
+                    <input type="text" id="stock-search" placeholder="Search Ticker..." 
+                        class="w-full md:w-48 bg-slate-800 border border-slate-700 rounded-lg pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all">
+                </div>
+
+                <!-- Manual Upload Fallback -->
+                <label class="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg px-4 py-2 text-sm cursor-pointer transition-colors">
+                    <i data-lucide="upload" class="w-4 h-4 text-blue-400"></i>
+                    <span>Upload CSV</span>
+                    <input type="file" id="manual-csv" class="hidden" accept=".csv">
+                </label>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto p-6">
+        
+        <!-- Summary Stats -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            <div class="glass-card p-4 rounded-xl border-t-2 border-t-blue-500">
+                <p class="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-1">Total Stocks</p>
+                <h3 id="stat-total" class="text-2xl font-black text-white">0</h3>
+            </div>
+            <div class="glass-card p-4 rounded-xl border-t-2 border-t-green-500">
+                <p class="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-1">Buy Signals</p>
+                <h3 id="stat-buy" class="text-2xl font-black text-green-400">0</h3>
+            </div>
+            <div class="glass-card p-4 rounded-xl border-t-2 border-t-red-500">
+                <p class="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-1">Sell Signals</p>
+                <h3 id="stat-sell" class="text-2xl font-black text-red-400">0</h3>
+            </div>
+            <div class="glass-card p-4 rounded-xl border-t-2 border-t-yellow-500">
+                <p class="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-1">Hold/Neutral</p>
+                <h3 id="stat-hold" class="text-2xl font-black text-yellow-400">0</h3>
+            </div>
+        </div>
+
+        <!-- Dashboard Grid (Container for Sections) -->
+        <div id="stocks-container" class="space-y-12">
+            <div class="py-20 flex flex-col items-center justify-center opacity-50">
+                <i data-lucide="loader-2" class="w-12 h-12 animate-spin mb-4 text-blue-500"></i>
+                <p class="font-bold tracking-widest text-xs uppercase">Awaiting Data Source</p>
+            </div>
+        </div>
+
+        <!-- Error State -->
+        <div id="error-box" class="hidden glass-card border-red-500/30 p-10 rounded-2xl text-center max-w-2xl mx-auto mt-10">
+            <div class="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i data-lucide="file-x" class="w-8 h-8 text-red-500"></i>
+            </div>
+            <h2 class="text-xl font-bold mb-2">Data Load Failed</h2>
+            <p id="error-message" class="text-slate-400 mb-6">Could not locate or parse the report for this date.</p>
+            
+            <div class="bg-slate-900/50 rounded-lg p-4 text-left border border-slate-800 mb-6">
+                <p class="text-xs text-slate-500 mb-2 font-mono uppercase">Path Debug:</p>
+                <ul id="attempted-paths" class="text-[11px] text-slate-400 font-mono space-y-1"></ul>
+            </div>
+
+            <p class="text-sm text-slate-300">
+                Please use the <strong>"Upload CSV"</strong> button if files aren't loading automatically.
+            </p>
+        </div>
+    </main>
+
+    <script>
+        let allStocksData = [];
+
+        const updateIcons = () => lucide.createIcons();
+        updateIcons();
+
+        // Formatter with negative red coloring logic
+        const formatValue = (val, isPercentage = false) => {
+            if (val === undefined || val === null || val === '') return '-';
+            const num = parseFloat(String(val).replace(/,/g, ''));
+            if (isNaN(num)) return val;
+
+            const formatted = num.toLocaleString(undefined, { 
+                minimumFractionDigits: 2, 
+                maximumFractionDigits: 2 
+            }) + (isPercentage ? '%' : '');
+
+            return num < 0 
+                ? `<span class="negative-val">${formatted}</span>` 
+                : formatted;
+        };
+
+        const getSignalClass = (decision) => {
+            const d = String(decision || '').toUpperCase();
+            if (d.includes('BUY')) return 'status-buy';
+            if (d.includes('SELL')) return 'status-sell';
+            return 'status-hold';
+        };
+
+        const renderCard = (stock) => {
+            const ticker = stock.Ticker || 'Unknown';
+            const decision = stock.Market_Decision || 'Wait/Hold';
+            const vsaPrice = stock.VsaDPrice && stock.VsaDPrice !== 'Neutral' ? stock.VsaDPrice : null;
+            const vsaVol = stock.VsaDVol && stock.VsaDVol !== 'Neutral' ? stock.VsaDVol : null;
+
+            return `
+                <div class="glass-card rounded-2xl overflow-hidden flex flex-col h-full">
+                    <!-- Top Section -->
+                    <div class="p-5 border-b border-slate-800 bg-slate-900/40">
+                        <div class="flex justify-between items-start mb-4">
+                            <div>
+                                <h3 class="text-2xl font-black text-white tracking-tighter leading-none">
+                                    <a href="https://finance.yahoo.com/chart/${ticker}" target="_blank" class="hover:text-blue-500 transition-colors cursor-pointer decoration-blue-500/30 underline-offset-4 hover:underline">
+                                        ${ticker}
+                                    </a>
+                                </h3>
+                                <div class="flex gap-2 mt-2">
+                                    ${vsaPrice ? `<span class="vsa-badge bg-blue-500/20 text-blue-400">P-VSA: ${vsaPrice}</span>` : ''}
+                                    ${vsaVol ? `<span class="vsa-badge bg-purple-500/20 text-purple-400">V-VSA: ${vsaVol}</span>` : ''}
+                                </div>
+                            </div>
+                            <span class="px-3 py-1 rounded-md text-[10px] font-black uppercase tracking-widest ${getSignalClass(decision)}">
+                                ${decision}
+                            </span>
+                        </div>
+                        <div class="flex items-baseline gap-2">
+                            <span class="text-4xl font-black text-white">${formatValue(stock.Close)}</span>
+                            <span class="text-xs text-slate-500 font-bold uppercase tracking-widest">SEK</span>
+                        </div>
+                    </div>
+
+                    <!-- Technical Core -->
+                    <div class="p-5 space-y-5 flex-grow">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="bg-slate-900/50 p-3 rounded-xl border border-slate-800">
+                                <p class="text-[9px] text-slate-500 font-black uppercase tracking-tighter mb-1">RSI Dashboard</p>
+                                <div class="flex justify-between text-xs font-mono">
+                                    <div class="flex flex-col">
+                                        <span class="text-[8px] text-slate-600 font-bold">DAY</span>
+                                        <span class="${parseFloat(stock.RsiD) > 70 ? 'text-orange-400' : 'text-slate-300'} font-bold">${Math.round(stock.RsiD) || '-'}</span>
+                                    </div>
+                                    <div class="flex flex-col">
+                                        <span class="text-[8px] text-slate-600 font-bold">WK</span>
+                                        <span class="text-slate-300 font-bold">${Math.round(stock.RsiW) || '-'}</span>
+                                    </div>
+                                    <div class="flex flex-col">
+                                        <span class="text-[8px] text-slate-600 font-bold">MON</span>
+                                        <span class="text-slate-300 font-bold">${Math.round(stock.RsiM) || '-'}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="bg-slate-900/50 p-3 rounded-xl border border-slate-800">
+                                <p class="text-[9px] text-slate-500 font-black uppercase tracking-tighter mb-1">Trend Index</p>
+                                <div class="text-[10px] font-bold ${String(stock.PriceTrend).includes('Up') ? 'text-green-400' : 'text-slate-400'}">
+                                    ${stock.PriceTrend || 'Consolidating'}
+                                </div>
+                                <div class="text-[9px] text-slate-600 mt-1 uppercase font-bold">${stock.RSITrend || ''}</div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <p class="text-[9px] text-slate-500 font-black uppercase tracking-tighter mb-1.5">Bollinger Spread</p>
+                                <div class="flex justify-between text-[10px] font-mono mb-1">
+                                    <span class="text-slate-400">L: ${formatValue(stock.Diff_BBLow_, true)}</span>
+                                    <span class="text-slate-400">H: ${formatValue(stock.Diff_BBHigh_, true)}</span>
+                                </div>
+                                <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                                    <div class="bg-gradient-to-r from-blue-500 to-indigo-500 h-full" style="width: 75%"></div>
+                                </div>
+                            </div>
+                            <div>
+                                <p class="text-[9px] text-slate-500 font-black uppercase tracking-tighter mb-1.5">Strength (ADX)</p>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-xs font-black ${parseFloat(stock.Adx_D) > 25 ? 'text-blue-400' : 'text-slate-500'}">${Math.round(stock.Adx_D) || '-'}</span>
+                                    <span class="text-[8px] text-slate-600 uppercase font-bold">${stock.Adx_D_IndicatorSlope || ''}</span>
+                                </div>
+                                <div class="text-[8px] mt-0.5 text-slate-500 font-mono">PDI: ${Math.round(stock.Pdi_D)} / MDI: ${Math.round(stock.Mdi_D)}</div>
+                            </div>
+                        </div>
+
+                        <div class="pt-2 border-t border-slate-800/50">
+                            <p class="text-[9px] text-slate-500 font-black uppercase tracking-tighter mb-2">Support Channels (SMA)</p>
+                            <div class="flex justify-between items-center text-[10px] font-mono bg-slate-900/30 p-2 rounded-lg">
+                                <span class="text-blue-400/80">20: ${Math.round(stock.Sma20)}</span>
+                                <span class="text-indigo-400/80">50: ${Math.round(stock.Sma50)}</span>
+                                <span class="text-slate-400/80">150: ${Math.round(stock.Sma150)}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Levels Footer -->
+                    <div class="px-5 py-4 bg-slate-900 border-t border-slate-800 flex justify-between items-center mt-auto">
+                        <div class="flex gap-4">
+                            <div>
+                                <p class="text-[8px] text-slate-500 font-black uppercase mb-0.5 tracking-widest">Target</p>
+                                <p class="text-xs font-black text-green-400">${formatValue(stock.Target)}</p>
+                            </div>
+                            <div>
+                                <p class="text-[8px] text-slate-500 font-black uppercase mb-0.5 tracking-widest">Stop Loss</p>
+                                <p class="text-xs font-black text-red-400">${formatValue(stock.StopLoss)}</p>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-[8px] text-slate-500 font-black uppercase mb-0.5 tracking-widest">Position</p>
+                            <p class="text-xs font-black text-white">${stock.Shares || 0} <span class="text-[9px] opacity-40">sh</span></p>
+                        </div>
+                    </div>
+                </div>
+            `;
+        };
+
+        const renderStocks = (stocks) => {
+            const container = document.getElementById('stocks-container');
+            const errorBox = document.getElementById('error-box');
+            
+            if (stocks.length === 0) {
+                container.innerHTML = '';
+                errorBox.classList.remove('hidden');
+                return;
+            }
+
+            errorBox.classList.add('hidden');
+
+            const buyStocks = stocks.filter(s => String(s.Market_Decision || '').toUpperCase().includes('BUY'));
+            const sellStocks = stocks.filter(s => String(s.Market_Decision || '').toUpperCase().includes('SELL'));
+            const otherStocks = stocks.filter(s => {
+                const d = String(s.Market_Decision || '').toUpperCase();
+                return !d.includes('BUY') && !d.includes('SELL');
+            });
+
+            const createSection = (title, list, accentColor) => {
+                if (list.length === 0) return '';
+                return `
+                    <div class="stock-section">
+                        <div class="flex items-center gap-3 mb-6 border-b border-slate-800 pb-3">
+                            <div class="w-1.5 h-6 rounded-full ${accentColor}"></div>
+                            <h2 class="text-xl font-black uppercase tracking-widest text-white flex items-baseline gap-2">
+                                ${title} 
+                                <span class="text-sm font-bold opacity-30 tracking-normal">/ ${list.length} STOCKS</span>
+                            </h2>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            ${list.map(stock => renderCard(stock)).join('')}
+                        </div>
+                    </div>
+                `;
+            };
+
+            container.innerHTML = 
+                createSection('Buy Signals', buyStocks, 'bg-green-500 shadow-[0_0_15px_rgba(74,222,128,0.4)]') +
+                createSection('Sell Signals', sellStocks, 'bg-red-500 shadow-[0_0_15px_rgba(248,113,113,0.4)]') +
+                createSection('Neutral / Monitor', otherStocks, 'bg-yellow-500 shadow-[0_0_15px_rgba(251,191,36,0.4)]');
+            
+            updateIcons();
+            updateStats(stocks);
+        };
+
+        const updateStats = (stocks) => {
+            document.getElementById('stat-total').innerText = stocks.length;
+            document.getElementById('stat-buy').innerText = stocks.filter(s => String(s.Market_Decision || '').toUpperCase().includes('BUY')).length;
+            document.getElementById('stat-sell').innerText = stocks.filter(s => String(s.Market_Decision || '').toUpperCase().includes('SELL')).length;
+            document.getElementById('stat-hold').innerText = stocks.filter(s => {
+                const d = String(s.Market_Decision || '').toUpperCase();
+                return d === '' || (!d.includes('BUY') && !d.includes('SELL'));
+            }).length;
+        };
+
+        const parseCSV = (text) => {
+            const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
+            if (lines.length === 0) return [];
+            
+            const rawHeaders = lines[0].replace(/^\uFEFF/, '').split(',');
+            const headers = rawHeaders.map(h => h.trim().replace(/%/g, ''));
+            
+            return lines.slice(1).map(line => {
+                const values = line.split(',');
+                const obj = {};
+                headers.forEach((header, i) => {
+                    obj[header] = values[i] ? values[i].trim() : '';
+                });
+                return obj;
+            });
+        };
+
+        async function fetchStockData(dateStr) {
+            const container = document.getElementById('stocks-container');
+            const errorBox = document.getElementById('error-box');
+            const dateDisplay = document.getElementById('current-file-date');
+            const pathList = document.getElementById('attempted-paths');
+            
+            container.innerHTML = `
+                <div class="col-span-full py-20 flex flex-col items-center justify-center opacity-50">
+                    <i data-lucide="loader-2" class="w-12 h-12 animate-spin mb-4 text-blue-500"></i>
+                    <p class="font-bold tracking-widest text-xs uppercase">Scanning for ${dateStr} Report</p>
+                </div>
+            `;
+            updateIcons();
+            errorBox.classList.add('hidden');
+            pathList.innerHTML = '';
+
+            const filename = `${dateStr}_Consolidated_Report.csv`;
+            const attempts = [`stock_data/${filename}`, filename];
+            let success = false;
+
+            for (const path of attempts) {
+                const li = document.createElement('li');
+                li.innerText = `Search: ${path}...`;
+                pathList.appendChild(li);
+
+                try {
+                    const response = await fetch(path);
+                    if (response.ok) {
+                        const csvText = await response.text();
+                        allStocksData = parseCSV(csvText);
+                        
+                        if (allStocksData.length > 0) {
+                            dateDisplay.innerText = `Active Session: ${dateStr}`;
+                            renderStocks(allStocksData);
+                            success = true;
+                            li.innerText += " FOUND";
+                            li.classList.add('text-green-500');
+                            break;
+                        }
+                    }
+                    li.innerText += ` MISSING (${response.status})`;
+                    li.classList.add('text-red-500');
+                } catch (e) {
+                    li.innerText += " BLOCKED/ERROR";
+                    li.classList.add('text-red-500');
+                }
+            }
+
+            if (!success) {
+                allStocksData = [];
+                container.innerHTML = '';
+                errorBox.classList.remove('hidden');
+                dateDisplay.innerText = "No Report Active";
+                updateStats([]);
+            }
+        }
+
+        document.getElementById('manual-csv').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                allStocksData = parseCSV(event.target.result);
+                if (allStocksData.length > 0) {
+                    document.getElementById('current-file-date').innerText = `Manual Load: ${file.name}`;
+                    renderStocks(allStocksData);
+                }
+            };
+            reader.readAsText(file);
+        });
+
+        document.getElementById('date-selector').addEventListener('change', (e) => {
+            fetchStockData(e.target.value);
+        });
+
+        document.getElementById('stock-search').addEventListener('input', (e) => {
+            const term = e.target.value.toLowerCase();
+            const filtered = allStocksData.filter(stock => 
+                (stock.Ticker && stock.Ticker.toLowerCase().includes(term)) || 
+                (stock.Market_Decision && stock.Market_Decision.toLowerCase().includes(term))
+            );
+            renderStocks(filtered);
+        });
+
+        window.onload = () => {
+            const defaultDate = new Date().toISOString().split('T')[0]; 
+            document.getElementById('date-selector').value = defaultDate;
+            fetchStockData(defaultDate);
+        };
+    </script>
+</body>
+</html>
