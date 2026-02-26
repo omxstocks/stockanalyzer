@@ -27,11 +27,8 @@ jobs:
         run: npm install
 
       - name: Run Script
-        run: node trend-analyzer.js
-        env:
-          # Reference your stored secrets here
-          API_KEY: ${{ secrets.YOUR_API_KEY }}
-
+        run: node ../../trend-analyzer.js
+        
       - name: Commit and Push Results
         run: |
           git config --global user.name "nrkkalyan"
