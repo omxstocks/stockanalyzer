@@ -564,10 +564,13 @@ async function run() {
     const args = process.argv.slice(2);
     let endDateInput = null, customTickers = [], backtest = "NO";
     if (args.length > 0) {
-        if (!args[0].includes('-')) {
+        if (args[0] === "YES" || args[0] === "NO") {
             backtest = args[0];
-            if (isValidDate(args[1])) { endDateInput = args[1]; customTickers = args.slice(2); } else { customTickers = args.slice(1); }
-        } else if (isValidDate(args[0])) { endDateInput = args[0]; customTickers = args.slice(1); } else { customTickers = args; }
+            if (isValidDate(args[1])) { endDateInput = args[1]; customTickers = args.slice(2); }
+            else { customTickers = args.slice(1); }
+        } else if (isValidDate(args[0])) {
+            endDateInput = args[0]; customTickers = args.slice(1);
+        } else { customTickers = args; }
     }
 
     const endDate = endDateInput ? new Date(endDateInput + 'T23:59:59') : new Date();
@@ -681,7 +684,11 @@ async function run() {
 
         // const consolidatedPath = path.join(outputFolder, `${endDateString}_Consolidated_Report.csv`);
         // fs.writeFileSync(consolidatedPath, convertToCSV(consolidatedData));
+<<<<<<< Updated upstream
         console.log(`\n${colors.green}${colors.bold}✔ CONSOLIDATED MASTER REPORT SAVED: ${new Date()}${colors.reset}`);
+=======
+         console.log(`\n${colors.green}${colors.bold}✔ CONSOLIDATED MASTER REPORT SAVED: ${new Date()}${colors.reset}`);
+>>>>>>> Stashed changes
 
 
     } else { console.log("No data available for Date: " + endDateString); }
