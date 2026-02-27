@@ -3,7 +3,7 @@ name: Hourly Stock Trend Analysis
 on:
   schedule:
     # Runs every hour from 9:00 to 18:00 UTC, Monday through Friday
-    - cron: '0 9-18 * * 1-5'
+    - cron: '0 6-20 * * 1-5'
   workflow_dispatch: 
 
 permissions:
@@ -29,7 +29,7 @@ jobs:
         run: npm ci 
 
       - name: Run Trend Analyzer
-        run: node trend-analyzer.js YES
+        run: node trend-analyzer.js
 
       - name: Commit and Push Results
         run: |
