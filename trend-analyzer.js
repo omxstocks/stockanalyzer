@@ -681,7 +681,7 @@ async function run() {
 
         // const consolidatedPath = path.join(outputFolder, `${endDateString}_Consolidated_Report.csv`);
         // fs.writeFileSync(consolidatedPath, convertToCSV(consolidatedData));
-        // console.log(`\n${colors.green}${colors.bold}✔ CONSOLIDATED MASTER REPORT SAVED: ${consolidatedPath}${colors.reset}`);
+        console.log(`\n${colors.green}${colors.bold}✔ CONSOLIDATED MASTER REPORT SAVED: ${new Date()}${colors.reset}`);
 
 
     } else { console.log("No data available for Date: " + endDateString); }
