@@ -249,16 +249,38 @@ function getGaugeSlope(values, n = 14) {
         let signal = '';
         const fastAdxRising = fast.adx.at(-1) > fast.adx.at(-2);
         const fastPdiRising = fast.pdi.at(-1) > fast.pdi.at(-2);
+        const fastMdiRising = fast.mdi.at(-1) > fast.mdi.at(-2);
 
         // BUY: Fast ADX crosses 25 AND is rising AND +DI dominates
-        if (currentFastADX > 25 && fastAdxRising && fastPdiRising && fast.pdi.at(-1) > fast.mdi.at(-1)) {
+        if (currentFastADX > 20 && fastAdxRising && fastPdiRising && fast.pdi.at(-1) > fast.mdi.at(-1)) {
             signal = "BUY";
+        }
+
+                // BUY: Fast ADX crosses 25 AND is rising AND +DI dominates
+        if (currentFastADX > 20 && fastAdxRising && fastPdiRising && fast.pdi.at(-1) > fast.mdi.at(-1)) {
+            signal = "BUY";
+        }
+
+        if (currentFastADX > 50 && currentPDI > 40 && currentMDI < 5 && fast.pdi.at(-1) < fast.pdi.at(-2)) {
+            signal = "SELL";
         }
 
         // SELL: Slow ADX begins to fall (Trend Failure) OR -DI overtakes +DI
         if (currentSlowADX < prevSlowADX || currentMDI > currentPDI) {
             signal = "SELL";
         }
+
+        // ACCUMULATE: with rising -DI dominates
+        if (fastAdxRising && fastMdiRising  && (currentFastADX > 35) && currentPDI < 10 && currentMDI > 40) {
+            signal = "ACCUMULATE FEW";
+        }
+
+        // ACCUMULATE: with rising -DI dominates
+        if (fastAdxRising && fastMdiRising && (currentFastADX > 30 || currentMDI > 40) && fast.mdi.at(-1) > fast.pdi.at(-1)
+             && (currentMDI -  currentPDI) > 15 ) {
+            signal = "ACCUMULATE";
+        }
+
 
         return {
             pdi: +currentPDI.toFixed(2),
@@ -498,6 +520,7 @@ function analyze(data, symbol, name, period2) {
     const std = data.standard, weeklyStd = aggregateData(std, 'weekly'), monthlyStd = aggregateData(std, 'monthly');
     const last = std.length - 1;
     const c = std[last];
+    
     const bb = calculateBollingerBands(std, 20, 2);
     const atr = calculateATR(std, 14);
     const rsi = getMultiTimeframeRSI(std, weeklyStd, monthlyStd, 14);
@@ -520,7 +543,7 @@ function analyze(data, symbol, name, period2) {
     const avgVol2W = calculateAvg(std, 15, 'volume');
     const avgVol10W = calculateAvg(std, 50, 'volume');
     const diffBBLow = bb ? ((c.close - bb.lower) / bb.lower) * 100 : 0, diffBBHigh = bb ? ((c.close - bb.upper) / bb.upper) * 100 : 0;
-    const entry = (std[last-3].open + std[last-3].high + std[last-3].low + std[last-3].close)/4; 
+    const entry = (std[last].open + std[last].high + std[last].close)/3; 
     const stop = entry - (atr * 2);
     const target = entry + (atr * 3.0);
     const riskPerShare = entry - stop;
@@ -743,7 +766,7 @@ function processAndSaveTradingData(data) {
   
       try {
         fs.writeFileSync(filePath, csvContent, 'utf8');
-        console.log(`✅ File saved: ${fileName} (${rows.length} entries)`);
+        //console.log(`✅ File saved: ${fileName} (${rows.length} entries)`);
       } catch (err) {
         console.error(`❌ Error saving ${fileName}:`, err);
       }
