@@ -543,8 +543,7 @@ function analyze(data, symbol, name, period2) {
     };
 }
 
-async function newFunction(endDateInput, intervalYears, customTickers, signals) {
-    const endDate = endDateInput ? new Date(endDateInput + 'T23:59:59') : new Date();
+async function newFunction(endDate, intervalYears, customTickers, signals) {
     const period2 = Math.floor(endDate.getTime() / 1000);
     const startDate = new Date(endDate);
     startDate.setDate(startDate.getDate() - Math.ceil(intervalYears * 365.25) - 300);
@@ -562,6 +561,7 @@ async function newFunction(endDateInput, intervalYears, customTickers, signals) 
 
 async function run() {
     const args = process.argv.slice(2);
+    
     let endDateInput = null, customTickers = [], backtest = "NO";
     if (args.length > 0) {
         if (args[0] === "YES" || args[0] === "NO") {
@@ -582,6 +582,7 @@ async function run() {
         return;
     }
 
+   // console.log("backtest: " + backtest + ", endDateInput: " + endDateInput);
 
     const endDateString = endDate.toISOString().split('T')[0];
     let signals = [];
@@ -590,11 +591,11 @@ async function run() {
         let tradingDate = new Date(Date.UTC(endDate.getFullYear(), endDate.getUTCMonth(), 1));
         while(tradingDate.getUTCMonth() === endDate.getUTCMonth() && endDate.getTime() >= tradingDate.getTime()){
             if(tradingDate.getUTCDay() !== 0 && tradingDate.getUTCDay() !== 6) {
-                await newFunction(tradingDate.toISOString().split('T')[0], 2, customTickers, signals);
+                await newFunction(tradingDate, 2, customTickers, signals);
             }
             tradingDate.setUTCDate(tradingDate.getUTCDate() + 1);
         }
-    } else { await newFunction(endDateInput, 2, customTickers, signals); }
+    } else { await newFunction(endDate, 2, customTickers, signals); }
     
     signals.sort((a, b) => new Date(a.Date) - new Date(b.Date));
 
@@ -682,14 +683,7 @@ async function run() {
 
           processAndSaveTradingData(consolidatedData);
 
-        // const consolidatedPath = path.join(outputFolder, `${endDateString}_Consolidated_Report.csv`);
-        // fs.writeFileSync(consolidatedPath, convertToCSV(consolidatedData));
-<<<<<<< Updated upstream
         console.log(`\n${colors.green}${colors.bold}✔ CONSOLIDATED MASTER REPORT SAVED: ${new Date()}${colors.reset}`);
-=======
-         console.log(`\n${colors.green}${colors.bold}✔ CONSOLIDATED MASTER REPORT SAVED: ${new Date()}${colors.reset}`);
->>>>>>> Stashed changes
-
 
     } else { console.log("No data available for Date: " + endDateString); }
 }
