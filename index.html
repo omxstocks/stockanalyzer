@@ -41,6 +41,7 @@
 
         .status-buy { color: #4ade80; background: rgba(74, 222, 128, 0.1); border: 1px solid rgba(74, 222, 128, 0.2); }
         .status-sell { color: #f87171; background: rgba(248, 113, 113, 0.1); border: 1px solid rgba(248, 113, 113, 0.2); }
+        .status-accumulate { color: #22d3ee; background: rgba(34, 211, 238, 0.1); border: 1px solid rgba(34, 211, 238, 0.2); }
         .status-hold { color: #fbbf24; background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.2); }
         
         .negative-val { color: #f87171 !important; }
@@ -64,7 +65,6 @@
 </head>
 <body class="min-h-screen custom-scrollbar">
 
-    <!-- Navbar -->
     <nav class="sticky top-0 z-50 border-b border-slate-800 bg-slate-900/80 backdrop-blur-md px-6 py-4">
         <div class="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div class="flex items-center gap-3">
@@ -78,21 +78,18 @@
             </div>
 
             <div class="flex flex-wrap items-center gap-3">
-                <!-- Date Picker -->
                 <div class="relative group">
                     <i data-lucide="calendar" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"></i>
                     <input type="date" id="date-selector" 
                         class="bg-slate-800 border border-slate-700 rounded-lg pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all cursor-pointer">
                 </div>
                 
-                <!-- Search -->
                 <div class="relative flex-grow md:flex-grow-0">
                     <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"></i>
                     <input type="text" id="stock-search" placeholder="Search Ticker..." 
                         class="w-full md:w-48 bg-slate-800 border border-slate-700 rounded-lg pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all">
                 </div>
 
-                <!-- Manual Upload Fallback -->
                 <label class="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg px-4 py-2 text-sm cursor-pointer transition-colors">
                     <i data-lucide="upload" class="w-4 h-4 text-blue-400"></i>
                     <span>Upload CSV</span>
@@ -102,11 +99,9 @@
         </div>
     </nav>
 
-    <!-- Main Content -->
     <main class="max-w-7xl mx-auto p-6">
         
-        <!-- Summary Stats -->
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
             <div class="glass-card p-4 rounded-xl border-t-2 border-t-blue-500">
                 <p class="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-1">Total Stocks</p>
                 <h3 id="stat-total" class="text-2xl font-black text-white">0</h3>
@@ -114,6 +109,10 @@
             <div class="glass-card p-4 rounded-xl border-t-2 border-t-green-500">
                 <p class="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-1">Buy Signals</p>
                 <h3 id="stat-buy" class="text-2xl font-black text-green-400">0</h3>
+            </div>
+            <div class="glass-card p-4 rounded-xl border-t-2 border-t-cyan-500">
+                <p class="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-1">Accumulate</p>
+                <h3 id="stat-accumulate" class="text-2xl font-black text-cyan-400">0</h3>
             </div>
             <div class="glass-card p-4 rounded-xl border-t-2 border-t-red-500">
                 <p class="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-1">Sell Signals</p>
@@ -125,7 +124,6 @@
             </div>
         </div>
 
-        <!-- Dashboard Grid (Container for Sections) -->
         <div id="stocks-container" class="space-y-12">
             <div class="py-20 flex flex-col items-center justify-center opacity-50">
                 <i data-lucide="loader-2" class="w-12 h-12 animate-spin mb-4 text-blue-500"></i>
@@ -133,7 +131,6 @@
             </div>
         </div>
 
-        <!-- Error State -->
         <div id="error-box" class="hidden glass-card border-red-500/30 p-10 rounded-2xl text-center max-w-2xl mx-auto mt-10">
             <div class="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
                 <i data-lucide="file-x" class="w-8 h-8 text-red-500"></i>
@@ -145,10 +142,6 @@
                 <p class="text-xs text-slate-500 mb-2 font-mono uppercase">Path Debug:</p>
                 <ul id="attempted-paths" class="text-[11px] text-slate-400 font-mono space-y-1"></ul>
             </div>
-
-            <p class="text-sm text-slate-300">
-                Please use the <strong>"Upload CSV"</strong> button if files aren't loading automatically.
-            </p>
         </div>
     </main>
 
@@ -158,7 +151,6 @@
         const updateIcons = () => lucide.createIcons();
         updateIcons();
 
-        // Formatter with negative red coloring logic
         const formatValue = (val, isPercentage = false) => {
             if (val === undefined || val === null || val === '') return '-';
             const num = parseFloat(String(val).replace(/,/g, ''));
@@ -178,6 +170,7 @@
             const d = String(decision || '').toUpperCase();
             if (d.includes('BUY')) return 'status-buy';
             if (d.includes('SELL')) return 'status-sell';
+            if (d.includes('ACCUMULATE')) return 'status-accumulate';
             return 'status-hold';
         };
 
@@ -189,7 +182,6 @@
 
             return `
                 <div class="glass-card rounded-2xl overflow-hidden flex flex-col h-full">
-                    <!-- Top Section -->
                     <div class="p-5 border-b border-slate-800 bg-slate-900/40">
                         <div class="flex justify-between items-start mb-4">
                             <div>
@@ -213,7 +205,6 @@
                         </div>
                     </div>
 
-                    <!-- Technical Core -->
                     <div class="p-5 space-y-5 flex-grow">
                         <div class="grid grid-cols-2 gap-4">
                             <div class="bg-slate-900/50 p-3 rounded-xl border border-slate-800">
@@ -273,7 +264,6 @@
                         </div>
                     </div>
 
-                    <!-- Levels Footer -->
                     <div class="px-5 py-4 bg-slate-900 border-t border-slate-800 flex justify-between items-center mt-auto">
                         <div class="flex gap-4">
                             <div>
@@ -307,10 +297,11 @@
             errorBox.classList.add('hidden');
 
             const buyStocks = stocks.filter(s => String(s.Market_Decision || '').toUpperCase().includes('BUY'));
+            const accumulateStocks = stocks.filter(s => String(s.Market_Decision || '').toUpperCase().includes('ACCUMULATE'));
             const sellStocks = stocks.filter(s => String(s.Market_Decision || '').toUpperCase().includes('SELL'));
             const otherStocks = stocks.filter(s => {
                 const d = String(s.Market_Decision || '').toUpperCase();
-                return !d.includes('BUY') && !d.includes('SELL');
+                return !d.includes('BUY') && !d.includes('SELL') && !d.includes('ACCUMULATE');
             });
 
             const createSection = (title, list, accentColor) => {
@@ -333,6 +324,7 @@
 
             container.innerHTML = 
                 createSection('Buy Signals', buyStocks, 'bg-green-500 shadow-[0_0_15px_rgba(74,222,128,0.4)]') +
+                createSection('Accumulate', accumulateStocks, 'bg-cyan-500 shadow-[0_0_15px_rgba(34,211,238,0.4)]') +
                 createSection('Sell Signals', sellStocks, 'bg-red-500 shadow-[0_0_15px_rgba(248,113,113,0.4)]') +
                 createSection('Neutral / Monitor', otherStocks, 'bg-yellow-500 shadow-[0_0_15px_rgba(251,191,36,0.4)]');
             
@@ -343,26 +335,23 @@
         const updateStats = (stocks) => {
             document.getElementById('stat-total').innerText = stocks.length;
             document.getElementById('stat-buy').innerText = stocks.filter(s => String(s.Market_Decision || '').toUpperCase().includes('BUY')).length;
+            document.getElementById('stat-accumulate').innerText = stocks.filter(s => String(s.Market_Decision || '').toUpperCase().includes('ACCUMULATE')).length;
             document.getElementById('stat-sell').innerText = stocks.filter(s => String(s.Market_Decision || '').toUpperCase().includes('SELL')).length;
             document.getElementById('stat-hold').innerText = stocks.filter(s => {
                 const d = String(s.Market_Decision || '').toUpperCase();
-                return d === '' || (!d.includes('BUY') && !d.includes('SELL'));
+                return d === '' || (!d.includes('BUY') && !d.includes('SELL') && !d.includes('ACCUMULATE'));
             }).length;
         };
 
         const parseCSV = (text) => {
             const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
             if (lines.length === 0) return [];
-            
             const rawHeaders = lines[0].replace(/^\uFEFF/, '').split(',');
             const headers = rawHeaders.map(h => h.trim().replace(/%/g, ''));
-            
             return lines.slice(1).map(line => {
                 const values = line.split(',');
                 const obj = {};
-                headers.forEach((header, i) => {
-                    obj[header] = values[i] ? values[i].trim() : '';
-                });
+                headers.forEach((header, i) => { obj[header] = values[i] ? values[i].trim() : ''; });
                 return obj;
             });
         };
@@ -373,12 +362,7 @@
             const dateDisplay = document.getElementById('current-file-date');
             const pathList = document.getElementById('attempted-paths');
             
-            container.innerHTML = `
-                <div class="col-span-full py-20 flex flex-col items-center justify-center opacity-50">
-                    <i data-lucide="loader-2" class="w-12 h-12 animate-spin mb-4 text-blue-500"></i>
-                    <p class="font-bold tracking-widest text-xs uppercase">Scanning for ${dateStr} Report</p>
-                </div>
-            `;
+            container.innerHTML = `<div class="col-span-full py-20 flex flex-col items-center justify-center opacity-50"><i data-lucide="loader-2" class="w-12 h-12 animate-spin mb-4 text-blue-500"></i><p class="font-bold tracking-widest text-xs uppercase">Scanning for ${dateStr} Report</p></div>`;
             updateIcons();
             errorBox.classList.add('hidden');
             pathList.innerHTML = '';
@@ -397,7 +381,6 @@
                     if (response.ok) {
                         const csvText = await response.text();
                         allStocksData = parseCSV(csvText);
-                        
                         if (allStocksData.length > 0) {
                             dateDisplay.innerText = `Active Session: ${dateStr}`;
                             renderStocks(allStocksData);
@@ -438,9 +421,7 @@
             reader.readAsText(file);
         });
 
-        document.getElementById('date-selector').addEventListener('change', (e) => {
-            fetchStockData(e.target.value);
-        });
+        document.getElementById('date-selector').addEventListener('change', (e) => fetchStockData(e.target.value));
 
         document.getElementById('stock-search').addEventListener('input', (e) => {
             const term = e.target.value.toLowerCase();
