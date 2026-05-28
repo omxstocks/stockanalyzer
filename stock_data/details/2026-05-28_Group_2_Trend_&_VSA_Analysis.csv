@@ -1,10 +1,6 @@
 Date,Ticker,Close,Diff_BBLow_%,Diff_BBHigh_%,VsaDPrice,VsaWPrice,VsaDVol,VsaWVol
 2026-05-28,ABB.ST,986.8,7.99,-3.68,Neutral,Neutral,Neutral,Neutral
 2026-05-28,AZN.ST,1712.5,2.48,-3.65,Neutral,Neutral,Neutral,Neutral
-2026-05-28,INVE-B.ST,377.9,5.1,-2.21,Neutral,Neutral,Neutral,Neutral
-2026-05-28,LUG.ST,571.8,2.55,-13.56,Neutral,Neutral,Neutral,Neutral
-2026-05-28,LUMI.ST,274.6,21.06,-3.03,Neutral,Neutral,Neutral,Neutral
-2026-05-28,NDA-SE.ST,177.3,7.24,-2.04,Neutral,Neutral,Neutral,Neutral
 2026-05-28,SAAB-B.ST,576.2,20.41,-3.34,High,High,High,High
 2026-05-28,SEB-A.ST,184,4.68,-2.61,Neutral,Neutral,Neutral,Neutral
 2026-05-28,SHB-B.ST,226.4,7.16,-3.04,Neutral,Neutral,Neutral,Neutral
