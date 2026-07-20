@@ -29,6 +29,7 @@ def send_telegram_summary(total_alerts):
     payload = {"chat_id": CHANNEL_ID, "text": summary_msg, "parse_mode": "Markdown"}
     try:
         requests.post(url, json=payload)
+        print(f"Successfully send message to url: {url}, {payload}" )
     except Exception as e:
         print(f"Error sending summary Telegram message: {e}")
 
