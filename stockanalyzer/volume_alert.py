@@ -1,7 +1,8 @@
 import os
+import time
 import requests
 import pandas as pd
-import yfinance as yf
+from datetime import datetime
 
 # Configuration
 TICKERS = [
@@ -17,19 +18,22 @@ THRESHOLD_MULTIPLIER = 2.3
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHANNEL_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-def send_telegram_alert(ticker, date_str, current_price, current_volume, avg_volume, ratio):
+def send_telegram_alert(ticker, date_str, current_price, price_change_pct, current_volume, avg_volume, ratio):
     """Sends the formatted alert to the Telegram channel."""
-    # Applying clear data points to the alert message as per your preferences
+    
+    # Using a Red Emoji to clearly indicate negative values in Telegram (which lacks font-color tags)
+    trend_emoji = "🔴" if price_change_pct < 0 else "🟢"
+    
     alert_msg = (
         f"🚨 *Volume Alert: {ticker}*\n"
         f"📅 Date: {date_str}\n"
-        f"💰 Price: {current_price:.2f}\n"
+        f"💵 Price: {current_price:.2f} {trend_emoji} ({price_change_pct:+.2f}%)\n"
         f"📊 Current Vol: {int(current_volume):,}\n"
         f"📉 21D Avg Vol: {int(avg_volume):,}\n"
-        f"⚡ Multiplier: *{ratio:.2f}x* (Threshold: {THRESHOLD_MULTIPLIER}x)"
+        f"⚡ Multiplier: *{ratio:.2f}x* (Threshold: {THRESHOLD_MULTIPLIER}x)\n"
+        f"ℹ️ Source: Yahoo Finance"
     )
     
-    # FIX: Corrected Telegram API Endpoint URL structure
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {"chat_id": CHANNEL_ID, "text": alert_msg, "parse_mode": "Markdown"}
     try:
@@ -38,67 +42,81 @@ def send_telegram_alert(ticker, date_str, current_price, current_volume, avg_vol
     except Exception as e:
         print(f"Error sending Telegram message for {ticker}: {e}")
 
-def evaluate_volume_data(ticker, date_str, current_price, current_volume, avg_volume):
-    """
-    Core engine that handles evaluation criteria logic.
-    Returns True if an alert is sent, False otherwise.
-    """
-    if pd.isna(current_volume) or pd.isna(avg_volume) or avg_volume == 0:
-        print(f"Invalid volume data for {ticker} on {date_str}")
-        return False
-
-    if current_volume > (avg_volume * THRESHOLD_MULTIPLIER):
-        ratio = current_volume / avg_volume
-        print(f"Alert triggered for {ticker} on {date_str} ({ratio:.2f}x)")
-        send_telegram_alert(ticker, date_str, current_price, current_volume, avg_volume, ratio)
-        return True
-        
-    print(f"{ticker} on {date_str}: Volume is normal ({current_volume:,} vs Avg {avg_volume:,.0f})")
-    return False
-
 def check_live_volume(ticker):
     """
-    Production Function: Downloads real-time / historical data from Yahoo Finance.
-    Automatically identifies the most recent trading day and compares it against 
-    the preceding 21 days.
+    Downloads historical data using the explicit Yahoo Finance Chart API.
+    Identifies the most recent trading day and compares it against the preceding 21 days.
     """
     try:
-        # Fetch data strictly from Yahoo Finance
-        stock = yf.Ticker(ticker)
-        # Pull 35 days of history to guarantee enough historical data points
-        df = stock.history(period="35d")
-
-        if df.empty:
+        # Calculate timestamps (Fetch ~40 days to guarantee at least 22 valid trading days)
+        end_date = int(time.time())
+        start_date = end_date - (40 * 24 * 60 * 60)
+        
+        # Using the explicitly preferred Yahoo Finance API Endpoint
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?period1={start_date}&period2={end_date}&interval=1d"
+        
+        # Yahoo Finance requires a User-Agent to prevent 403 Forbidden errors
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+        
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+        
+        result = data.get('chart', {}).get('result', [])
+        if not result:
             print(f"No data returned from Yahoo Finance for {ticker}")
             return False
-
-        # FIX: Dynamically get the latest available date instead of a hardcoded string
-        target_date = df.index[-1]
-        target_date_str = target_date.strftime('%Y-%m-%d')
-
-        # Isolate the previous 21 days, excluding the target/latest day
-        historical_df = df.iloc[:-1].tail(21)
-
-        if len(historical_df) < 21:
-            print(f"Not enough historical days before {target_date_str} to calculate baseline.")
+            
+        # Extract raw data points
+        timestamps = result[0]['timestamp']
+        quote = result[0]['indicators']['quote'][0]
+        
+        df = pd.DataFrame({
+            'timestamp': timestamps,
+            'close': quote['close'],
+            'volume': quote['volume']
+        })
+        
+        # Clean up data (remove days where volume or close might be null due to market holidays)
+        df = df.dropna()
+        
+        if len(df) < 22: # We need 1 current day + 21 historical days
+            print(f"Not enough historical trading days for {ticker} to calculate baseline.")
             return False
+            
+        df['date'] = pd.to_datetime(df['timestamp'], unit='s').dt.strftime('%Y-%m-%d')
+        
+        # Latest day data
+        latest_row = df.iloc[-1]
+        target_date_str = latest_row['date']
+        current_volume = latest_row['volume']
+        current_price = latest_row['close']
+        
+        # Calculate daily price change percentage to show negatives clearly
+        prev_price = df.iloc[-2]['close']
+        price_change_pct = ((current_price - prev_price) / prev_price) * 100
 
-        avg_volume_21 = historical_df["Volume"].mean()
-        current_volume = df.iloc[-1]["Volume"]
-        current_price = df.iloc[-1]["Close"]
+        # Isolate the previous 21 days
+        historical_df = df.iloc[:-1].tail(21)
+        avg_volume_21 = historical_df["volume"].mean()
 
-        return evaluate_volume_data(ticker, target_date_str, current_price, current_volume, avg_volume_21)
+        # Evaluate against our criteria
+        if current_volume > (avg_volume_21 * THRESHOLD_MULTIPLIER):
+            ratio = current_volume / avg_volume_21
+            print(f"Alert triggered for {ticker} on {target_date_str} ({ratio:.2f}x)")
+            send_telegram_alert(ticker, target_date_str, current_price, price_change_pct, current_volume, avg_volume_21, ratio)
+            return True
+            
+        print(f"{ticker} on {target_date_str}: Volume is normal ({current_volume:,} vs Avg {avg_volume_21:,.0f})")
+        return False
 
     except Exception as e:
         print(f"Error checking live volume for {ticker}: {e}")
         return False
 
 if __name__ == "__main__":
-    # Ensure tokens exist to avoid running fruitless requests
     if not BOT_TOKEN or not CHANNEL_ID:
         print("Warning: Telegram bot token or chat ID not found. Ensure environment variables are set.")
     
-    # Live execution sample run
     for t in TICKERS:
-        # We no longer pass a hardcoded date. The script will automatically check the latest available day!
         check_live_volume(t)
