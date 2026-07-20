@@ -100,6 +100,13 @@ def check_live_volume(ticker):
 
         latest_row = df.iloc[-1]
         target_date_str = latest_row['date']
+        
+        # Ensure we only evaluate and send alerts for the current date
+        today_str = pd.Timestamp.today().strftime('%Y-%m-%d')
+        if target_date_str != today_str:
+            print(f"Skipping {ticker}: Latest data ({target_date_str}) is not from today ({today_str}).")
+            return False
+
         current_volume = latest_row['volume']
         current_price = latest_row['close']
         
