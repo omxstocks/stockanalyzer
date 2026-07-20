@@ -1,0 +1,42 @@
+name: Run Automated Telegram Alerts
+
+on:
+  # Triggers the workflow every day at 08:00 UTC
+  schedule:
+    - cron: '0 8 * * *'
+    
+  # Triggers the workflow every time you push code to the main branch
+  push:
+    branches:
+      - main
+
+  # Allows you to manually click a button in GitHub to run the script anytime
+  workflow_dispatch:
+
+jobs:
+  send-alerts:
+    runs-on: ubuntu-latest
+
+    steps:
+    # 1. Downloads a copy of your repository code onto the runner
+    - name: Check out repository code
+      uses: actions/checkout@v4
+
+    # 2. Sets up a clean Python environment
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    # 3. Installs dependencies required by your script
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install requests
+
+    # 4. Runs your script and securely passes your secrets into it
+    - name: Run Python script
+      env:
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      run: python volume_alert.py
