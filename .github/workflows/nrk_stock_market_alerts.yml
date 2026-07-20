@@ -1,9 +1,14 @@
 name: Run Automated Telegram Alerts
 
 on:
-  # Triggers the workflow every day at 22:00 UTC (after US and EU markets close)
+  # Triggers the workflow multiple times per day (times in UTC)
   schedule:
-    - cron: '0 22 * * *'
+    - cron: '45 8 * * *'
+    - cron: '40 11 * * *'
+    - cron: '45 15 * * *'
+    - cron: '0 17 * * *'
+    - cron: '0 18 * * *'
+    - cron: '0 21 * * *'
     
   # Triggers the workflow every time you push code to the main branch
   push:
