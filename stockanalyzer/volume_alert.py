@@ -133,7 +133,8 @@ if __name__ == "__main__":
         # Script automatically checks the latest available day!
         if check_live_volume(t):
             alerts_sent_count += 1
-            
+
+    print(f"Sending Alert count {alerts_sent_count}")
     # Send the final summary count message
     if BOT_TOKEN and CHANNEL_ID:
         send_telegram_summary(alerts_sent_count)
