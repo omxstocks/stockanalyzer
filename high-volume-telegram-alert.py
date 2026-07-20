@@ -12,6 +12,7 @@ TICKERS = [
     "INDU-C.ST", "LIFCO-B.ST", "SAND.ST", "SKA-B.ST", "SKF-B.ST", "TEL2-B.ST", "TELIA.ST"
 ]
 THRESHOLD_MULTIPLIER = 2.3
+TODAY_STR = pd.Timestamp.today().strftime('%Y-%m-%d')
 
 # Retrieve secrets from environment variables
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -20,9 +21,9 @@ CHANNEL_ID = os.getenv("TELEGRAM_CHAT_ID")
 def send_telegram_summary(total_alerts):
     """Sends a final summary of alerts generated to the Telegram channel."""
     if total_alerts == 0:
-        summary_msg = "📊 *Volume Alerts Summary*\nNo volume alerts triggered today.\nℹ️ Source: Yahoo Finance"
+        summary_msg = f"📊 *Volume Alerts Summary for {TODAY_STR}*\nNo volume alerts triggered today.\nℹ️ Source: Yahoo Finance"
     else:
-        summary_msg = f"📊 *Volume Alerts Summary*\nTotal alerts triggered today: *{total_alerts}*\nℹ️ Source: Yahoo Finance"
+        summary_msg = f"📊 *Volume Alerts Summary for {TODAY_STR}*\nTotal alerts triggered today: *{total_alerts}*\nℹ️ Source: Yahoo Finance"
         
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {"chat_id": CHANNEL_ID, "text": summary_msg, "parse_mode": "Markdown"}
@@ -102,9 +103,8 @@ def check_live_volume(ticker):
         target_date_str = latest_row['date']
         
         # Ensure we only evaluate and send alerts for the current date
-        today_str = pd.Timestamp.today().strftime('%Y-%m-%d')
-        if target_date_str != today_str:
-            print(f"Skipping {ticker}: Latest data ({target_date_str}) is not from today ({today_str}).")
+        if target_date_str != TODAY_STR:
+            print(f"Skipping {ticker}: Latest data ({target_date_str}) is not from today ({TODAY_STR}).")
             return False
 
         current_volume = latest_row['volume']
