@@ -113,7 +113,7 @@ def check_live_volume(ticker):
             send_telegram_alert(ticker, target_date_str, current_price, price_change_pct, current_volume, avg_volume_21, ratio)
             return True
             
-        print(f"{ticker} on {target_date_str}: Volume is normal ({current_volume:,} vs Avg {avg_volume_21:,.0f})")
+        print(f"{ticker} on {target_date_str}: Volume is normal: ({current_volume:,} vs Avg {avg_volume_21:,.0f})")
         return False
 
     except Exception as e:
