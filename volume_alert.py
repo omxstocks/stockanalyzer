@@ -3,7 +3,6 @@ import time
 import requests
 import pandas as pd
 
-
 # Configuration
 TICKERS = [
     "ABB.ST", "AZN.ST", "INVE-A.ST", "INVE-B.ST", "LUG.ST", "LUMI.ST", "NDA-SE.ST", "SAAB-B.ST",
@@ -29,7 +28,6 @@ def send_telegram_summary(total_alerts):
     payload = {"chat_id": CHANNEL_ID, "text": summary_msg, "parse_mode": "Markdown"}
     try:
         requests.post(url, json=payload)
-        print(f"Successfully send message to url: {url}, {payload}" )
     except Exception as e:
         print(f"Error sending summary Telegram message: {e}")
 
@@ -38,8 +36,11 @@ def send_telegram_alert(ticker, date_str, current_price, price_change_pct, curre
     # Using a red circle for negative values as per preference
     trend_indicator = "🔴" if price_change_pct < 0 else "🟢"
     
+    # Format the ticker as a markdown hyperlink pointing to Yahoo Finance
+    ticker_link = f"[{ticker}](https://finance.yahoo.com/chart/{ticker})"
+    
     alert_msg = (
-        f"🚨 *Volume Alert: {ticker}*\n"
+        f"🚨 *Volume Alert: {ticker_link}*\n"
         f"📅 Date: {date_str}\n"
         f"💵 Price: {current_price:.2f} {trend_indicator} ({price_change_pct:+.2f}%)\n"
         f"📊 Current Vol: {int(current_volume):,}\n"
@@ -49,6 +50,8 @@ def send_telegram_alert(ticker, date_str, current_price, price_change_pct, curre
     )
     
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    
+    # Ensuring parse_mode is set to "Markdown" so the URL renders correctly
     payload = {"chat_id": CHANNEL_ID, "text": alert_msg, "parse_mode": "Markdown"}
     try:
         response = requests.post(url, json=payload)
@@ -113,7 +116,7 @@ def check_live_volume(ticker):
             send_telegram_alert(ticker, target_date_str, current_price, price_change_pct, current_volume, avg_volume_21, ratio)
             return True
             
-        print(f"{ticker} on {target_date_str}: Volume Is Normal ({current_volume:,} vs Avg {avg_volume_21:,.0f})")
+        print(f"{ticker} on {target_date_str}: Volume is normal ({current_volume:,} vs Avg {avg_volume_21:,.0f})")
         return False
 
     except Exception as e:
@@ -133,8 +136,7 @@ if __name__ == "__main__":
         # Script automatically checks the latest available day!
         if check_live_volume(t):
             alerts_sent_count += 1
-
-    print(f"Sending Alert count {alerts_sent_count}")
+            
     # Send the final summary count message
     if BOT_TOKEN and CHANNEL_ID:
         send_telegram_summary(alerts_sent_count)
