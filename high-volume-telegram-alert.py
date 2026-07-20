@@ -37,7 +37,7 @@ def send_telegram_alert(ticker, date_str, current_price, price_change_pct, curre
     trend_indicator = "🔴" if price_change_pct < 0 else "🟢"
     
     # Format the ticker as a markdown hyperlink pointing to Yahoo Finance
-    ticker_link = f"[{ticker}](https://finance.yahoo.com/chart/{ticker})"
+    ticker_link = f"(https://finance.yahoo.com/chart/{ticker})"
     
     alert_msg = (
         f"🚨 *Volume Alert: {ticker_link}*\n"
@@ -46,7 +46,8 @@ def send_telegram_alert(ticker, date_str, current_price, price_change_pct, curre
         f"📊 Current Vol: {int(current_volume):,}\n"
         f"📉 21D Avg Vol: {int(avg_volume):,}\n"
         f"⚡ Multiplier: *{ratio:.2f}x* (Threshold: {THRESHOLD_MULTIPLIER}x)\n"
-        f"ℹ️ Source: Yahoo Finance"
+        #TODO : ENTRY, TARGET, SL
+        #f"ℹ️ Source: Yahoo Finance"
     )
     
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
