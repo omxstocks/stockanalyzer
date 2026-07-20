@@ -1,9 +1,9 @@
 name: Run Automated Telegram Alerts
 
 on:
-  # Triggers the workflow every day at 08:00 UTC
+  # Triggers the workflow every day at 22:00 UTC (after US and EU markets close)
   schedule:
-    - cron: '0 8 * * *'
+    - cron: '0 22 * * *'
     
   # Triggers the workflow every time you push code to the main branch
   push:
@@ -29,10 +29,11 @@ jobs:
         python-version: '3.11'
 
     # 3. Installs dependencies required by your script
+    # Updated: Removed yfinance as we are now directly calling the Yahoo Finance JSON endpoint
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install requests
+        pip install requests pandas
 
     # 4. Runs your script and securely passes your secrets into it
     - name: Run Python script
