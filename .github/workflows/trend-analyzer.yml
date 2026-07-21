@@ -3,7 +3,7 @@ name: Hourly Stock Trend Analysis
 on:
   schedule:
     # Runs every hour from 9:00 to 18:00 UTC, Monday through Friday
-    - cron: '0 6-20 * * 1-5'
+    - cron: '7 6-20 * * 1-5'
   workflow_dispatch: 
 
 permissions:
