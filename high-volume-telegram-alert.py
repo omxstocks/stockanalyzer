@@ -8,8 +8,8 @@ TICKERS = [
     "ABB.ST", "AZN.ST", "INVE-A.ST", "INVE-B.ST", "LUG.ST", "LUMI.ST", "NDA-SE.ST", "SAAB-B.ST",
     "SEB-A.ST", "SHB-B.ST", "SWED-A.ST", "VOLV-B.ST", "RELIANCE.NS", "TCS.NS", "LT.NS", "ICICIBANK.NS",
     "HDFCBANK.NS", "NIFTYBEES.NS", "GOLDBEES.NS", "AAPL", "MSFT", "NVDA", "IBN", "ALFA.ST", "ADDT-B.ST",
-    "ASSA-B.ST", "ATCO-A.ST", "BOL.ST", "EPI-A.ST", "EQT.ST", "ERIC-B.ST", "ESSITY-B.ST", "EVO.ST", "SHB-A.ST",
-    "INDU-C.ST", "LIFCO-B.ST", "SAND.ST", "SKA-B.ST", "SKF-B.ST", "TEL2-B.ST", "TELIA.ST"
+    "ASSA-B.ST", "ATCO-A.ST", "EPI-A.ST", "SHB-A.ST",
+    "INDU-C.ST", "SAND.ST", "SKA-B.ST", "SKF-B.ST", "TEL2-B.ST", "TELIA.ST"
 ]
 THRESHOLD_MULTIPLIER = 2.3
 TODAY_STR = pd.Timestamp.today().strftime('%Y-%m-%d')
