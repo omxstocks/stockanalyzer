@@ -3,7 +3,7 @@ name: Run Automated Telegram Alerts
 on:
   schedule:
     # Runs every hour from 7:00 to 18:00 UTC, Monday through Friday
-    - cron: '30 6-22 * * 1-5'
+    - cron: '30 18 1 1 *'
   workflow_dispatch: 
     
   # Triggers the workflow every time you push code to the main branch
