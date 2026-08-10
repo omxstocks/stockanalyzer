@@ -107,7 +107,8 @@ def build_consolidated_message(volume_hits, low_hits, rsi_hits, rs_new_high_hits
     separate message per ticker/condition. Console output uses print_console_report()
     instead — a bullet list doesn't read well as a wide monospace table on a phone."""
     ref_date = ref_date or TODAY_STR
-    lines = [f"📊 *Alerts Summary for {ref_date}*"]
+    run_time = pd.Timestamp.now().strftime('%H:%M:%S')
+    lines = [f"📊 *Alerts Summary for {ref_date} {run_time}*"]
 
     if not volume_hits and not low_hits and not rsi_hits and not rs_new_high_hits and not rs_new_high_before_price_hits:
         lines.append("No volume, LOW-price, RSI, or RS alerts triggered.")
