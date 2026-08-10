@@ -30,6 +30,22 @@ LOW_DRAWDOWN_PCT = 10.0
 RSI_PERIOD = 14
 RSI_DROP_PCT = 25.0
 
+# RS (Relative Strength) Line alerts, per deepvue.com/indicators/how-to-use-the-relative-strength-line:
+# RS = stock_close / benchmark_close, plotted over time. A "new high" is measured against the
+# trailing RS_LOOKBACK bars (same window as the LOW-price check, for consistency). Two signals:
+#   - RS_NEW_HIGH ("green dot"): RS breaks its lookback high AND price breaks its lookback high
+#     the same day -> confirms strength.
+#   - RS_NEW_HIGH_BEFORE_PRICE ("pink dot"): RS breaks its lookback high while price hasn't broken
+#     its own -> early outperformance signal, institutional accumulation ahead of price.
+# Benchmark is chosen per-market since TICKERS mixes US, Swedish (.ST), and Indian (.NS) names —
+# comparing a .ST stock's RS against the S&P 500 wouldn't reflect real relative strength.
+RS_LOOKBACK = 60
+BENCHMARK_BY_SUFFIX = {
+    ".ST": "^OMX",    # OMX Stockholm 30
+    ".NS": "^NSEI",   # Nifty 50
+}
+DEFAULT_BENCHMARK = "^GSPC"  # S&P 500, used for US tickers (and any unmapped suffix)
+
 FETCH_DAYS_BACK = 130  # calendar days of history (comfortably covers 60+ trading days)
 REQUEST_TIMEOUT = 10
 REQUEST_DELAY_SEC = 1.5
@@ -85,15 +101,16 @@ def send_telegram_message(text):
         print(f"Error sending Telegram message: {e}")
 
 
-def build_consolidated_message(volume_hits, low_hits, rsi_hits, ref_date=None):
+def build_consolidated_message(volume_hits, low_hits, rsi_hits, rs_new_high_hits,
+                                rs_new_high_before_price_hits, ref_date=None):
     """Builds one Telegram message covering every alert from this run, instead of a
     separate message per ticker/condition. Console output uses print_console_report()
     instead — a bullet list doesn't read well as a wide monospace table on a phone."""
     ref_date = ref_date or TODAY_STR
     lines = [f"📊 *Alerts Summary for {ref_date}*"]
 
-    if not volume_hits and not low_hits and not rsi_hits:
-        lines.append("No volume, LOW-price, or RSI alerts triggered.")
+    if not volume_hits and not low_hits and not rsi_hits and not rs_new_high_hits and not rs_new_high_before_price_hits:
+        lines.append("No volume, LOW-price, RSI, or RS alerts triggered.")
         lines.append("ℹ️ Source: Yahoo Finance")
         return "\n".join(lines)
 
@@ -127,6 +144,24 @@ def build_consolidated_message(volume_hits, low_hits, rsi_hits, ref_date=None):
                 f"(Drop *{h['drop_pct']:.2f}%*)"
             )
 
+    if rs_new_high_before_price_hits:
+        lines.append(f"\n🩷 *RS New High Before Price ({len(rs_new_high_before_price_hits)})*")
+        for h in rs_new_high_before_price_hits:
+            ticker_link = f"[{h['ticker']}](https://finance.yahoo.com/chart/{h['ticker']})"
+            lines.append(
+                f"• {ticker_link}: RS *{h['rs_value']:.4f}* new {RS_LOOKBACK}D high vs "
+                f"{h['benchmark']} — price hasn't confirmed yet"
+            )
+
+    if rs_new_high_hits:
+        lines.append(f"\n🟢 *RS New High ({len(rs_new_high_hits)})*")
+        for h in rs_new_high_hits:
+            ticker_link = f"[{h['ticker']}](https://finance.yahoo.com/chart/{h['ticker']})"
+            lines.append(
+                f"• {ticker_link}: RS *{h['rs_value']:.4f}* new {RS_LOOKBACK}D high vs "
+                f"{h['benchmark']} — price confirming"
+            )
+
     lines.append("\nℹ️ Source: Yahoo Finance")
     return "\n".join(lines)
 
@@ -157,14 +192,15 @@ def _print_bordered_table(df):
     print(border("└", "┴", "┘"))
 
 
-def print_console_report(volume_hits, low_hits, rsi_hits, ref_date=None):
+def print_console_report(volume_hits, low_hits, rsi_hits, rs_new_high_hits,
+                          rs_new_high_before_price_hits, ref_date=None):
     """Prints each alert category as an aligned table, one per section, using pandas
     (already a dependency) instead of Markdown bullets — reads far better in a terminal."""
     ref_date = ref_date or TODAY_STR
     print(f"\n=== Alerts Summary for {ref_date} ===")
 
-    if not volume_hits and not low_hits and not rsi_hits:
-        print("No volume, LOW-price, or RSI alerts triggered.\n")
+    if not volume_hits and not low_hits and not rsi_hits and not rs_new_high_hits and not rs_new_high_before_price_hits:
+        print("No volume, LOW-price, RSI, or RS alerts triggered.\n")
         return
 
     if volume_hits:
@@ -198,6 +234,26 @@ def print_console_report(volume_hits, low_hits, rsi_hits, ref_date=None):
             "Drop%": f"{h['drop_pct']:.2f}",
         } for h in rsi_hits]).sort_values("Ticker")
         print(f"\n--- RSI Drop Alerts ({len(rsi_hits)}) ---")
+        _print_bordered_table(df)
+
+    if rs_new_high_before_price_hits:
+        df = pd.DataFrame([{
+            "Ticker": h["ticker"],
+            "RS Value": f"{h['rs_value']:.4f}",
+            "Benchmark": h["benchmark"],
+            "Price": f"{h['current_price']:.2f}",
+        } for h in rs_new_high_before_price_hits]).sort_values("Ticker")
+        print(f"\n--- RS New High Before Price (pink) ({len(rs_new_high_before_price_hits)}) ---")
+        _print_bordered_table(df)
+
+    if rs_new_high_hits:
+        df = pd.DataFrame([{
+            "Ticker": h["ticker"],
+            "RS Value": f"{h['rs_value']:.4f}",
+            "Benchmark": h["benchmark"],
+            "Price": f"{h['current_price']:.2f}",
+        } for h in rs_new_high_hits]).sort_values("Ticker")
+        print(f"\n--- RS New High (green) ({len(rs_new_high_hits)}) ---")
         _print_bordered_table(df)
 
     print()
@@ -436,6 +492,75 @@ def check_rsi_alert(ticker, df, ref_date=None):
         return None
 
 
+def get_benchmark_symbol(ticker):
+    """Maps a ticker to its comparison index for RS: per-market since TICKERS mixes US,
+    Swedish (.ST), and Indian (.NS) names — see BENCHMARK_BY_SUFFIX."""
+    for suffix, benchmark in BENCHMARK_BY_SUFFIX.items():
+        if ticker.endswith(suffix):
+            return benchmark
+    return DEFAULT_BENCHMARK
+
+
+def check_rs_new_high_alert(ticker, df, benchmark_df, benchmark_symbol, ref_date=None):
+    """
+    Mirrors Deepvue's RS Line markers: RS = stock_close / benchmark_close, and a "new high" is
+    the current value exceeding the max of the trailing RS_LOOKBACK bars (not counting today).
+
+    Returns a dict with signal_type:
+      - "new_high": RS and price both break their RS_LOOKBACK-bar high on ref_date (green dot,
+        confirms strength).
+      - "new_high_before_price": RS breaks its high while price hasn't broken its own (pink dot,
+        early outperformance signal — the leading-indicator case DOCU showed in Feb-Mar 2020).
+    Returns None if RS itself isn't at a new high, or there isn't enough aligned history.
+    """
+    ref_date = ref_date or TODAY_STR
+    try:
+        latest_row = df.iloc[-1]
+        target_date_str = latest_row['date']
+        if target_date_str != ref_date:
+            print(f"Skipping RS check for {ticker}: latest data ({target_date_str}) is not from the target date ({ref_date}).")
+            return None
+
+        merged = pd.merge(
+            df[['date', 'close']], benchmark_df[['date', 'close']],
+            on='date', suffixes=('_stock', '_bench'),
+        )
+        if len(merged) < RS_LOOKBACK + 1:
+            print(f"Not enough aligned history to compute RS for {ticker} vs {benchmark_symbol}.")
+            return None
+
+        if merged.iloc[-1]['date'] != ref_date:
+            print(f"Skipping RS check for {ticker}: {benchmark_symbol} has no bar on {ref_date}.")
+            return None
+
+        merged['rs'] = merged['close_stock'] / merged['close_bench']
+
+        window = merged.tail(RS_LOOKBACK + 1)
+        prior, current = window.iloc[:-1], window.iloc[-1]
+
+        rs_is_new_high = current['rs'] > prior['rs'].max()
+        if not rs_is_new_high:
+            print(f"{ticker} on {target_date_str}: RS not at a new {RS_LOOKBACK}D high.")
+            return None
+
+        price_is_new_high = current['close_stock'] > prior['close_stock'].max()
+        signal_type = "new_high" if price_is_new_high else "new_high_before_price"
+
+        print(f"RS {signal_type} alert for {ticker} on {target_date_str} vs {benchmark_symbol} (RS {current['rs']:.4f})")
+        return {
+            "ticker": ticker,
+            "date": target_date_str,
+            "signal_type": signal_type,
+            "rs_value": float(current['rs']),
+            "current_price": float(current['close_stock']),
+            "benchmark": benchmark_symbol,
+        }
+
+    except Exception as e:
+        print(f"Error checking RS new high for {ticker}: {e}")
+        return None
+
+
 if __name__ == "__main__":
     args = parse_args()
 
@@ -456,6 +581,12 @@ if __name__ == "__main__":
     volume_hits = []
     low_hits = []
     rsi_hits = []
+    rs_new_high_hits = []
+    rs_new_high_before_price_hits = []
+
+    # Benchmarks repeat across tickers (e.g. every .ST name shares ^OMX), so each benchmark is
+    # only fetched once per run.
+    benchmark_cache = {}
 
     for t in tickers_to_check:
         df = fetch_ohlcv(t, as_of_date=args.date)
@@ -479,14 +610,31 @@ if __name__ == "__main__":
         if rsi_hit:
             rsi_hits.append(rsi_hit)
 
+        # RS (Relative Strength Line) is likewise independent of the other signals.
+        benchmark_symbol = get_benchmark_symbol(t)
+        if benchmark_symbol not in benchmark_cache:
+            benchmark_cache[benchmark_symbol] = fetch_ohlcv(benchmark_symbol, as_of_date=args.date)
+            time.sleep(REQUEST_DELAY_SEC)
+        benchmark_df = benchmark_cache[benchmark_symbol]
+
+        if benchmark_df is not None:
+            rs_hit = check_rs_new_high_alert(t, df, benchmark_df, benchmark_symbol, ref_date=target_date)
+            if rs_hit:
+                if rs_hit["signal_type"] == "new_high":
+                    rs_new_high_hits.append(rs_hit)
+                else:
+                    rs_new_high_before_price_hits.append(rs_hit)
+
         if len(tickers_to_check) > 1:
             time.sleep(REQUEST_DELAY_SEC)
 
     if not is_adhoc:
         save_state(state)
 
-    print_console_report(volume_hits, low_hits, rsi_hits, ref_date=target_date)
+    print_console_report(volume_hits, low_hits, rsi_hits, rs_new_high_hits,
+                          rs_new_high_before_price_hits, ref_date=target_date)
 
     if not args.no_telegram and BOT_TOKEN and CHANNEL_ID:
-        message = build_consolidated_message(volume_hits, low_hits, rsi_hits, ref_date=target_date)
+        message = build_consolidated_message(volume_hits, low_hits, rsi_hits, rs_new_high_hits,
+                                              rs_new_high_before_price_hits, ref_date=target_date)
         send_telegram_message(message)
