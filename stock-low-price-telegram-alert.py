@@ -30,6 +30,12 @@ LOW_DRAWDOWN_PCT = 10.0
 RSI_PERIOD = 14
 RSI_DROP_PCT = 25.0
 
+# PE alert: fires when the derived PE ratio (see compute_pe_info) moves by more than
+# PE_CHANGE_PCT_THRESHOLD% in either direction versus the previous trading date's PE.
+# Independent of the other signals — same rationale as RSI above, just unsigned (a big PE
+# rise and a big PE fall are both worth flagging, not just drops).
+PE_CHANGE_PCT_THRESHOLD = 5.0
+
 # RS (Relative Strength) Line alerts, per deepvue.com/indicators/how-to-use-the-relative-strength-line:
 # RS = stock_close / benchmark_close, plotted over time. A "new high" is measured against the
 # trailing RS_LOOKBACK bars (same window as the LOW-price check, for consistency). Two signals:
@@ -49,6 +55,15 @@ DEFAULT_BENCHMARK = "^GSPC"  # S&P 500, used for US tickers (and any unmapped su
 FETCH_DAYS_BACK = 130  # calendar days of history (comfortably covers 60+ trading days)
 REQUEST_TIMEOUT = 10
 REQUEST_DELAY_SEC = 1.5
+
+# PE ratio shown alongside every alert is derived, not fetched historically: Yahoo's free
+# endpoints only expose the *current* trailing-twelve-month EPS (no point-in-time fundamentals),
+# so PE-on-date = that date's close / current trailingEps. This is exact for live (--date-less)
+# runs and a reasonable approximation for recent dates, but drifts for old --date backtests
+# spanning an EPS-changing earnings report. EPS is fetched once per run, batched across every
+# ticker in a single Yahoo quote call, since it barely varies day to day.
+YAHOO_CRUMB_URL = "https://query2.finance.yahoo.com/v1/test/getcrumb"
+YAHOO_QUOTE_URL = "https://query1.finance.yahoo.com/v7/finance/quote"
 
 TODAY_STR = pd.Timestamp.today().strftime('%Y-%m-%d')
 
@@ -101,7 +116,14 @@ def send_telegram_message(text):
         print(f"Error sending Telegram message: {e}")
 
 
-def build_consolidated_message(volume_hits, low_hits, rsi_hits, rs_new_high_hits,
+def _pe_suffix(h):
+    """Renders ' | PE 24.31 (+1.05%)' when PE info was attached to the hit, else ''."""
+    if "pe_ratio" not in h:
+        return ""
+    return f" | PE *{h['pe_ratio']:.2f}* ({h['pe_change_pct']:+.2f}%)"
+
+
+def build_consolidated_message(volume_hits, low_hits, rsi_hits, pe_hits, rs_new_high_hits,
                                 rs_new_high_before_price_hits, ref_date=None):
     """Builds one Telegram message covering every alert from this run, instead of a
     separate message per ticker/condition. Console output uses print_console_report()
@@ -110,8 +132,8 @@ def build_consolidated_message(volume_hits, low_hits, rsi_hits, rs_new_high_hits
     run_time = pd.Timestamp.now().strftime('%H:%M:%S')
     lines = [f"📊 *Alerts Summary for {ref_date} {run_time}*"]
 
-    if not volume_hits and not low_hits and not rsi_hits and not rs_new_high_hits and not rs_new_high_before_price_hits:
-        lines.append("No volume, LOW-price, RSI, or RS alerts triggered.")
+    if not volume_hits and not low_hits and not rsi_hits and not pe_hits and not rs_new_high_hits and not rs_new_high_before_price_hits:
+        lines.append("No volume, LOW-price, RSI, PE, or RS alerts triggered.")
         lines.append("ℹ️ Source: Yahoo Finance")
         return "\n".join(lines)
 
@@ -124,6 +146,7 @@ def build_consolidated_message(volume_hits, low_hits, rsi_hits, rs_new_high_hits
                 f"• {ticker_link}: {h['current_price']:.2f} {trend_indicator} "
                 f"({h['price_change_pct']:+.2f}%) — Vol *{h['ratio']:.2f}x* "
                 f"(cur {int(h['current_volume']):,} vs {VOLUME_AVG_WINDOW}D avg {int(h['avg_volume']):,})"
+                f"{_pe_suffix(h)}"
             )
 
     if low_hits:
@@ -134,6 +157,7 @@ def build_consolidated_message(volume_hits, low_hits, rsi_hits, rs_new_high_hits
                 f"• {ticker_link}: Low {h['current_low']:.2f}, "
                 f"{LOW_DRAWDOWN_LOOKBACK}-Bar High {h['peak_price']:.2f} (on {h['peak_date']}), "
                 f"Drawdown *{-h['drawdown_pct']:.2f}%*"
+                f"{_pe_suffix(h)}"
             )
 
     if rsi_hits:
@@ -143,6 +167,18 @@ def build_consolidated_message(volume_hits, low_hits, rsi_hits, rs_new_high_hits
             lines.append(
                 f"• {ticker_link}: RSI {h['prev_rsi']:.2f} → {h['current_rsi']:.2f} "
                 f"(Drop *{h['drop_pct']:.2f}%*)"
+                f"{_pe_suffix(h)}"
+            )
+
+    if pe_hits:
+        lines.append(f"\n💰 *PE Change Alerts ({len(pe_hits)})*")
+        for h in pe_hits:
+            direction = "🔺" if h["pe_change_pct"] > 0 else "🔻"
+            ticker_link = f"[{h['ticker']}](https://finance.yahoo.com/chart/{h['ticker']})"
+            lines.append(
+                f"• {ticker_link}: PE {h['prev_pe_ratio']:.2f} → *{h['pe_ratio']:.2f}* {direction} "
+                f"({h['pe_change_pct']:+.2f}%) — Close {h['prev_close']:.2f} → {h['current_close']:.2f} "
+                f"({h['close_change_pct']:+.2f}%)"
             )
 
     if rs_new_high_before_price_hits:
@@ -152,6 +188,7 @@ def build_consolidated_message(volume_hits, low_hits, rsi_hits, rs_new_high_hits
             lines.append(
                 f"• {ticker_link}: RS *{h['rs_value']:.4f}* new {RS_LOOKBACK}D high vs "
                 f"{h['benchmark']} — price hasn't confirmed yet"
+                f"{_pe_suffix(h)}"
             )
 
     if rs_new_high_hits:
@@ -161,6 +198,7 @@ def build_consolidated_message(volume_hits, low_hits, rsi_hits, rs_new_high_hits
             lines.append(
                 f"• {ticker_link}: RS *{h['rs_value']:.4f}* new {RS_LOOKBACK}D high vs "
                 f"{h['benchmark']} — price confirming"
+                f"{_pe_suffix(h)}"
             )
 
     lines.append("\nℹ️ Source: Yahoo Finance")
@@ -193,16 +231,21 @@ def _print_bordered_table(df):
     print(border("└", "┴", "┘"))
 
 
-def print_console_report(volume_hits, low_hits, rsi_hits, rs_new_high_hits,
+def print_console_report(volume_hits, low_hits, rsi_hits, pe_hits, rs_new_high_hits,
                           rs_new_high_before_price_hits, ref_date=None):
     """Prints each alert category as an aligned table, one per section, using pandas
     (already a dependency) instead of Markdown bullets — reads far better in a terminal."""
     ref_date = ref_date or TODAY_STR
     print(f"\n=== Alerts Summary for {ref_date} ===")
 
-    if not volume_hits and not low_hits and not rsi_hits and not rs_new_high_hits and not rs_new_high_before_price_hits:
-        print("No volume, LOW-price, RSI, or RS alerts triggered.\n")
+    if not volume_hits and not low_hits and not rsi_hits and not pe_hits and not rs_new_high_hits and not rs_new_high_before_price_hits:
+        print("No volume, LOW-price, RSI, PE, or RS alerts triggered.\n")
         return
+
+    def pe_cols(h):
+        if "pe_ratio" not in h:
+            return {"PE": "-", "PE Chg%": "-"}
+        return {"PE": f"{h['pe_ratio']:.2f}", "PE Chg%": f"{h['pe_change_pct']:+.2f}"}
 
     if volume_hits:
         df = pd.DataFrame([{
@@ -212,6 +255,7 @@ def print_console_report(volume_hits, low_hits, rsi_hits, rs_new_high_hits,
             "Volume": f"{int(h['current_volume']):,}",
             f"{VOLUME_AVG_WINDOW}D Avg": f"{int(h['avg_volume']):,}",
             "Ratio": f"{h['ratio']:.2f}x",
+            **pe_cols(h),
         } for h in volume_hits]).sort_values("Ticker")
         print(f"\n--- Volume Alerts ({len(volume_hits)}) ---")
         _print_bordered_table(df)
@@ -223,6 +267,7 @@ def print_console_report(volume_hits, low_hits, rsi_hits, rs_new_high_hits,
             f"{LOW_DRAWDOWN_LOOKBACK}D High": f"{h['peak_price']:.2f}",
             "High Date": h["peak_date"],
             "Drawdown%": f"{-h['drawdown_pct']:.2f}",
+            **pe_cols(h),
         } for h in low_hits]).sort_values("Ticker")
         print(f"\n--- LOW-Price Alerts ({len(low_hits)}) ---")
         _print_bordered_table(df)
@@ -233,8 +278,22 @@ def print_console_report(volume_hits, low_hits, rsi_hits, rs_new_high_hits,
             "Prev RSI": f"{h['prev_rsi']:.2f}",
             "Cur RSI": f"{h['current_rsi']:.2f}",
             "Drop%": f"{h['drop_pct']:.2f}",
+            **pe_cols(h),
         } for h in rsi_hits]).sort_values("Ticker")
         print(f"\n--- RSI Drop Alerts ({len(rsi_hits)}) ---")
+        _print_bordered_table(df)
+
+    if pe_hits:
+        df = pd.DataFrame([{
+            "Ticker": h["ticker"],
+            "Prev PE": f"{h['prev_pe_ratio']:.2f}",
+            "Cur PE": f"{h['pe_ratio']:.2f}",
+            "PE Chg%": f"{h['pe_change_pct']:+.2f}",
+            "Prev Close": f"{h['prev_close']:.2f}",
+            "Cur Close": f"{h['current_close']:.2f}",
+            "Close Chg%": f"{h['close_change_pct']:+.2f}",
+        } for h in pe_hits]).sort_values("Ticker")
+        print(f"\n--- PE Change Alerts ({len(pe_hits)}) ---")
         _print_bordered_table(df)
 
     if rs_new_high_before_price_hits:
@@ -243,6 +302,7 @@ def print_console_report(volume_hits, low_hits, rsi_hits, rs_new_high_hits,
             "RS Value": f"{h['rs_value']:.4f}",
             "Benchmark": h["benchmark"],
             "Price": f"{h['current_price']:.2f}",
+            **pe_cols(h),
         } for h in rs_new_high_before_price_hits]).sort_values("Ticker")
         print(f"\n--- RS New High Before Price (pink) ({len(rs_new_high_before_price_hits)}) ---")
         _print_bordered_table(df)
@@ -253,6 +313,7 @@ def print_console_report(volume_hits, low_hits, rsi_hits, rs_new_high_hits,
             "RS Value": f"{h['rs_value']:.4f}",
             "Benchmark": h["benchmark"],
             "Price": f"{h['current_price']:.2f}",
+            **pe_cols(h),
         } for h in rs_new_high_hits]).sort_values("Ticker")
         print(f"\n--- RS New High (green) ({len(rs_new_high_hits)}) ---")
         _print_bordered_table(df)
@@ -317,6 +378,101 @@ def fetch_ohlcv(ticker, as_of_date=None):
     except Exception as e:
         print(f"Error fetching data for {ticker}: {e}")
         return None
+
+
+def fetch_eps_map(tickers):
+    """
+    Batches every ticker into a single Yahoo Finance v7 quote call and returns
+    {ticker: trailing_eps}. Tickers with no EPS (ETFs like GOLDBEES.NS, anything Yahoo
+    doesn't cover) are omitted rather than mapped to None, so callers can use plain
+    membership checks. Requires a crumb + session cookie (Yahoo's quote endpoint 401s
+    without one); a fresh session is primed and discarded each run rather than persisted.
+    """
+    if not tickers:
+        return {}
+    try:
+        session = requests.Session()
+        session.headers.update({'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+        session.get("https://fc.yahoo.com", timeout=REQUEST_TIMEOUT)
+        crumb = session.get(YAHOO_CRUMB_URL, timeout=REQUEST_TIMEOUT).text.strip()
+
+        response = session.get(
+            YAHOO_QUOTE_URL,
+            params={"symbols": ",".join(tickers), "crumb": crumb},
+            timeout=REQUEST_TIMEOUT,
+        )
+        response.raise_for_status()
+        results = response.json().get("quoteResponse", {}).get("result", [])
+
+        eps_map = {}
+        for r in results:
+            eps = r.get("epsTrailingTwelveMonths")
+            if eps:
+                eps_map[r["symbol"]] = eps
+        return eps_map
+
+    except Exception as e:
+        print(f"Error fetching EPS data from Yahoo Finance: {e}")
+        return {}
+
+
+def compute_pe_info(ticker, df, eps_map, ref_date=None):
+    """
+    Returns {"pe_ratio", "prev_pe_ratio", "pe_change_pct", "current_close", "prev_close",
+    "close_change_pct"} for ref_date's close vs the previous trading day's close, both PE
+    ratios divided by the same trailing EPS (see FETCH_DAYS_BACK comment above for why EPS is
+    treated as constant across the two days). Returns None when EPS isn't available for this
+    ticker or there isn't a prior day to compare against.
+    """
+    ref_date = ref_date or TODAY_STR
+    eps = eps_map.get(ticker)
+    if not eps or len(df) < 2:
+        return None
+
+    latest_row = df.iloc[-1]
+    if latest_row['date'] != ref_date:
+        return None
+
+    current_close = latest_row['close']
+    prev_close = df.iloc[-2]['close']
+    if prev_close == 0:
+        return None
+
+    pe_ratio = current_close / eps
+    prev_pe_ratio = prev_close / eps
+    if prev_pe_ratio == 0:
+        return None
+
+    pe_change_pct = (pe_ratio - prev_pe_ratio) / prev_pe_ratio * 100
+    close_change_pct = (current_close - prev_close) / prev_close * 100
+    return {
+        "pe_ratio": pe_ratio,
+        "prev_pe_ratio": prev_pe_ratio,
+        "pe_change_pct": pe_change_pct,
+        "current_close": current_close,
+        "prev_close": prev_close,
+        "close_change_pct": close_change_pct,
+    }
+
+
+def check_pe_alert(ticker, pe_info, ref_date=None):
+    """
+    Returns a dict of alert details if pe_info's day-over-day PE change exceeds
+    PE_CHANGE_PCT_THRESHOLD% in either direction, else None. Takes the already-computed
+    pe_info (see compute_pe_info) rather than recomputing it, since the caller needs it
+    anyway to attach to the other alert types. Returns None when PE info wasn't available
+    (no EPS data, or the latest row isn't ref_date's), matching the other check_* functions.
+    """
+    ref_date = ref_date or TODAY_STR
+    if pe_info is None:
+        return None
+
+    if abs(pe_info["pe_change_pct"]) > PE_CHANGE_PCT_THRESHOLD:
+        print(f"PE alert triggered for {ticker} on {ref_date} (PE change {pe_info['pe_change_pct']:+.2f}%)")
+        return {"ticker": ticker, "date": ref_date, **pe_info}
+
+    print(f"{ticker} on {ref_date}: PE change normal ({pe_info['pe_change_pct']:+.2f}%, threshold {PE_CHANGE_PCT_THRESHOLD}%)")
+    return None
 
 
 def check_live_volume(ticker, df, ref_date=None):
@@ -582,6 +738,7 @@ if __name__ == "__main__":
     volume_hits = []
     low_hits = []
     rsi_hits = []
+    pe_hits = []
     rs_new_high_hits = []
     rs_new_high_before_price_hits = []
 
@@ -589,27 +746,45 @@ if __name__ == "__main__":
     # only fetched once per run.
     benchmark_cache = {}
 
+    # One batched call for every ticker's trailing EPS, so PE info can be attached to whichever
+    # alerts fire below without a per-ticker network round-trip.
+    eps_map = fetch_eps_map(tickers_to_check)
+
     for t in tickers_to_check:
         df = fetch_ohlcv(t, as_of_date=args.date)
         if df is None:
             continue
+
+        pe_info = compute_pe_info(t, df, eps_map, ref_date=target_date)
 
         # Volume and LOW-price are independent signals — both are checked every run, and a
         # ticker can land in both lists at once (e.g. a deep drawdown accompanied by a volume
         # spike on the same bar is exactly the kind of day worth flagging twice, not once).
         low_hit = check_low_price_alert(t, df, state, ref_date=target_date)
         if low_hit:
+            if pe_info:
+                low_hit.update(pe_info)
             low_hits.append(low_hit)
 
         volume_hit = check_live_volume(t, df, ref_date=target_date)
         if volume_hit:
+            if pe_info:
+                volume_hit.update(pe_info)
             volume_hits.append(volume_hit)
 
         # RSI is an independent momentum signal, not part of the Volume/LOW exclusivity —
         # it's checked (and can fire) regardless of whether either of those already did.
         rsi_hit = check_rsi_alert(t, df, ref_date=target_date)
         if rsi_hit:
+            if pe_info:
+                rsi_hit.update(pe_info)
             rsi_hits.append(rsi_hit)
+
+        # PE change is independent too — it can fire whether or not any other signal did,
+        # since a >5% derived-PE swing (see PE_CHANGE_PCT_THRESHOLD) is itself worth flagging.
+        pe_hit = check_pe_alert(t, pe_info, ref_date=target_date)
+        if pe_hit:
+            pe_hits.append(pe_hit)
 
         # RS (Relative Strength Line) is likewise independent of the other signals.
         benchmark_symbol = get_benchmark_symbol(t)
@@ -621,6 +796,8 @@ if __name__ == "__main__":
         if benchmark_df is not None:
             rs_hit = check_rs_new_high_alert(t, df, benchmark_df, benchmark_symbol, ref_date=target_date)
             if rs_hit:
+                if pe_info:
+                    rs_hit.update(pe_info)
                 if rs_hit["signal_type"] == "new_high":
                     rs_new_high_hits.append(rs_hit)
                 else:
@@ -632,10 +809,10 @@ if __name__ == "__main__":
     if not is_adhoc:
         save_state(state)
 
-    print_console_report(volume_hits, low_hits, rsi_hits, rs_new_high_hits,
+    print_console_report(volume_hits, low_hits, rsi_hits, pe_hits, rs_new_high_hits,
                           rs_new_high_before_price_hits, ref_date=target_date)
 
     if not args.no_telegram and BOT_TOKEN and CHANNEL_ID:
-        message = build_consolidated_message(volume_hits, low_hits, rsi_hits, rs_new_high_hits,
+        message = build_consolidated_message(volume_hits, low_hits, rsi_hits, pe_hits, rs_new_high_hits,
                                               rs_new_high_before_price_hits, ref_date=target_date)
         send_telegram_message(message)
