@@ -187,7 +187,7 @@ def build_consolidated_message(volume_hits, low_hits, rsi_hits, pe_hits, rs_new_
             ticker_link = f"[{h['ticker']}](https://finance.yahoo.com/chart/{h['ticker']})"
             lines.append(
                 f"• {ticker_link}: RS *{h['rs_value']:.4f}* new {RS_LOOKBACK}D high vs "
-                f"{h['benchmark']} — price hasn't confirmed yet"
+                f"{h['benchmark']} — Close {h['current_price']:.2f} — price hasn't confirmed yet"
                 f"{_pe_suffix(h)}"
             )
 
@@ -197,7 +197,7 @@ def build_consolidated_message(volume_hits, low_hits, rsi_hits, pe_hits, rs_new_
             ticker_link = f"[{h['ticker']}](https://finance.yahoo.com/chart/{h['ticker']})"
             lines.append(
                 f"• {ticker_link}: RS *{h['rs_value']:.4f}* new {RS_LOOKBACK}D high vs "
-                f"{h['benchmark']} — price confirming"
+                f"{h['benchmark']} — Close {h['current_price']:.2f} — price confirming"
                 f"{_pe_suffix(h)}"
             )
 
